@@ -1,21 +1,12 @@
 #include <mcp_can.h>
 #include <mcp_can_dfs.h>
 
-//#include <Adafruit_ATParser.h>
-//#include <Adafruit_BLE.h>
-//#include <Adafruit_BLEBattery.h>
-//#include <Adafruit_BLEEddystone.h>
 #include <Adafruit_BLEGatt.h>
-//#include <Adafruit_BLEMIDI.h>
 #include <Adafruit_BluefruitLE_SPI.h>
-//#include <Adafruit_BluefruitLE_UART.h>
-//#include <Speed-Studio_CAN_BUS_Shield/mcp_can.h>
-//#include <SPI.h>
 
-#define BUFSIZE 128
+#define BUFSIZE                        128
 
-
-#define BLUEFRUIT_SPI_CS               8
+#define BLUEFRUIT_SPI_CS               9
 #define BLUEFRUIT_SPI_IRQ              7
 #define BLUEFRUIT_SPI_RST              4    // Optional but recommended, set to -1 if unused
 
@@ -34,15 +25,9 @@
 // demo: CAN-BUS Shield, receive data
 #include <Arduino.h>
 
-//#include "IIC_without_ACK.h"
-
 #include "CAN_DGL_SPI.h"
 
 #include <EEPROM.h>
-
-//extern HardwareSerial Serial;
-//extern SPIClass SPI;
-
 
 long unsigned int rxId;
 unsigned char len = 0;
@@ -63,8 +48,8 @@ const char *voltage_O2_label = "O2 Voltage";
 int32_t charIdTx;
 int32_t charIdRx;
   
-//CAN_DGL_mcp_2515_SPI CAN(9); 
-MCP_CAN CAN(9);
+//CAN_DGL_mcp_2515_SPI CAN(9);
+MCP_CAN CAN(BLUEFRUIT_SPI_CS);
 
 /* ...software SPI, using SCK/MOSI/MISO user-defined SPI pins and then user selected CS/IRQ/RST */
 Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_SCK, BLUEFRUIT_SPI_MISO,
@@ -78,6 +63,7 @@ Adafruit_BLEGatt gatt(ble);
 int characteristicId_[5];
 int serviceId_[5];
 
+//Callback to handle data/requests coming from the phone i.e. central device.
 void bleRx(int32_t chars_id, uint8_t data[], uint16_t len)
 {
   Serial.print( F("[BLE GATT RX] (" ) );
@@ -156,12 +142,14 @@ bool getUserInput(char buffer[], uint8_t maxSize)
 
 void setup()
 {
-   while (!Serial);  // required for Flora & Micro
+
+ /* Initialise the module */
+
+    while (!Serial);  // required for Flora & Micro
      delay(500);
    Serial.begin(115200);
    //Serial.begin(9600);
-   
- /* Initialise the module */
+
   //
   //BLE related setup
   //
@@ -177,23 +165,22 @@ void setup()
 
   /* Disable command echo from Bluefruit */
   //ble.echo(false);
-  
-  if (!ble.waitForOK()){
-    Serial.println(F("No service set!!"));
-  }
     
   Serial.println("Requesting Bluefruit info:");
   /* Print Bluefruit information */
   ble.info();
 
-  
-  //SPI.begin();
+  Serial.println(F("Adafruit Bluefruit AT Command Example"));
+  Serial.println(F("-------------------------------------"));
+  // Set module to DATA mode
+  Serial.println( F("Switching to DATA mode!") );
+  ble.setMode(BLUEFRUIT_MODE_DATA);
   
   //
   //CAN related setup
   //
-  /*
-    while (CAN_OK != CAN.begin(CAN_1000KBPS))              // init can bus : baudrate = 1000k
+  
+    while (CAN_OK != CAN.begin(CAN_500KBPS))              // init can bus : baudrate = 1000k
     {
         Serial.println("CAN BUS Shield init fail");
         Serial.println(" Init CAN BUS Shield again");
@@ -204,7 +191,7 @@ void setup()
     
     CAN.init_Mask(0, 0, 0x3ff);                         // there are 2 mask in mcp2515, you need to set both of them
     CAN.init_Mask(1, 0, 0x3ff);
-*/
+
 
     /*
      * set filter, we can receive id from 0x04 ~ 0x09
@@ -218,11 +205,7 @@ void setup()
     CAN.init_Filt(4, 0, 0x08);                          // there are 6 filter in mcp2515
     CAN.init_Filt(5, 0, 0x09);                          // there are 6 filter in mcp2515
 */
-   Serial.println(F("Adafruit Bluefruit AT Command Example"));
-  Serial.println(F("-------------------------------------"));
-  // Set module to DATA mode
-  Serial.println( F("Switching to DATA mode!") );
-  ble.setMode(BLUEFRUIT_MODE_DATA);
+
 }
 
 
