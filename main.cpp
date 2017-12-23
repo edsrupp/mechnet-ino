@@ -1,8 +1,10 @@
+#include <Adafruit_BLEGatt.h>
+#include <Adafruit_BluefruitLE_SPI.h>
+
 #include <mcp_can.h>
 #include <mcp_can_dfs.h>
 
-#include <Adafruit_BLEGatt.h>
-#include <Adafruit_BluefruitLE_SPI.h>
+//#include "CAN_DGL_SPI.h"
 
 #define BUFSIZE                        128
 
@@ -23,11 +25,9 @@
 #define VERBOSE_MODE                   true  // If set to 'true' enables debug output
 
 // demo: CAN-BUS Shield, receive data
-#include <Arduino.h>
+//#include <Arduino.h>
 
-#include "CAN_DGL_SPI.h"
-
-#include <EEPROM.h>
+//#include <EEPROM.h>
 
 long unsigned int rxId;
 unsigned char len = 0;
@@ -47,21 +47,39 @@ const char *voltage_O2_label = "O2 Voltage";
 //This needs to be set dynamically from the call that registers the characteristic
 int32_t charIdTx;
 int32_t charIdRx;
-  
-//CAN_DGL_mcp_2515_SPI CAN(9);
-MCP_CAN CAN(BLUEFRUIT_SPI_CS);
 
 /* ...software SPI, using SCK/MOSI/MISO user-defined SPI pins and then user selected CS/IRQ/RST */
-Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_SCK, BLUEFRUIT_SPI_MISO,
-                             BLUEFRUIT_SPI_MOSI, BLUEFRUIT_SPI_CS,
-                             BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
+//Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_SCK, BLUEFRUIT_SPI_MISO,
+//                             BLUEFRUIT_SPI_MOSI, BLUEFRUIT_SPI_CS,
+//                             BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
+
+/* ...hardware SPI, using SCK/MOSI/MISO hardware SPI pins and then user selected CS/IRQ/RST */
+//IMPORTANT: I spent 3 WEEKS trying to get the CAN and SPI libs to work together i.e. including
+//the CAN initialization in the setup function kept screwing up the 
+//ble spi communication with the phone - switching to the "hardware" ctor fixed that...
+//Must be some configuration conflict with my use of the "software SPI" ctor seen above... 
+Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
 
 //Provides syntactic sugar to make programing to the api easier
 Adafruit_BLEGatt gatt(ble);
 
+//CAN_DGL_mcp_2515_SPI CAN(9);
+MCP_CAN CAN(BLUEFRUIT_SPI_CS);
+
 //Some globals for keeping track of characteristics
 int characteristicId_[5];
 int serviceId_[5];
+
+void updateBleVal(uint8_t CharacteristicId, uint32_t MeasuredValue) {
+  ble.print(F("AT+GATTCHAR="));
+  ble.print(CharacteristicId);
+  ble.print(F(","));
+  ble.println(MeasuredValue);
+
+  if(!ble.waitForOK()) {
+    Serial.println(F("Problem updating characteristic value"));
+  }
+}
 
 //Callback to handle data/requests coming from the phone i.e. central device.
 void bleRx(int32_t chars_id, uint8_t data[], uint16_t len)
@@ -77,6 +95,14 @@ void bleRx(int32_t chars_id, uint8_t data[], uint16_t len)
   }else{
     Serial.println("We got something else back");
   }
+
+  //Update our characteristic for the phone to pick up
+  //updateBleVal(1,777);
+
+  //Here we would take the message coming from the phone and create a message for the CAN...
+  //send it out and return the requested information back to the phone which in turn sends that
+  //information back to the DMV for emission analysis
+  gatt.setChar(uint8_t charID, uint8_t const data[], uint8_t size);
 }
 
 void setupBleServices() {
@@ -103,17 +129,6 @@ void setupBleServices() {
   ble.reset();
   ble.sendCommandCheckOK( F("AT+GATTLIST") );
   ble.end();
-}
-
-void updateBleVal(uint8_t CharacteristicId, uint32_t MeasuredValue) {
-  ble.print(F("AT+GATTCHAR="));
-  ble.print(CharacteristicId);
-  ble.print(F(","));
-  ble.println(MeasuredValue);
-
-  if(!ble.waitForOK()) {
-    Serial.println(F("Problem updating characteristic value"));
-  }
 }
 
 bool getUserInput(char buffer[], uint8_t maxSize)
@@ -148,34 +163,6 @@ void setup()
     while (!Serial);  // required for Flora & Micro
      delay(500);
    Serial.begin(115200);
-   //Serial.begin(9600);
-
-  //
-  //BLE related setup
-  //
-  Serial.print(F("Initialising the Bluefruit LE module: "));
-
-  if ( !ble.begin(VERBOSE_MODE) )
-  {
-    Serial.println(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
-  }
-  Serial.println( F("OK!") );
-
-  setupBleServices();
-
-  /* Disable command echo from Bluefruit */
-  //ble.echo(false);
-    
-  Serial.println("Requesting Bluefruit info:");
-  /* Print Bluefruit information */
-  ble.info();
-
-  Serial.println(F("Adafruit Bluefruit AT Command Example"));
-  Serial.println(F("-------------------------------------"));
-  // Set module to DATA mode
-  Serial.println( F("Switching to DATA mode!") );
-  ble.setMode(BLUEFRUIT_MODE_DATA);
-  
   //
   //CAN related setup
   //
@@ -204,8 +191,37 @@ void setup()
     CAN.init_Filt(3, 0, 0x07);                          // there are 6 filter in mcp2515
     CAN.init_Filt(4, 0, 0x08);                          // there are 6 filter in mcp2515
     CAN.init_Filt(5, 0, 0x09);                          // there are 6 filter in mcp2515
-*/
+*/   
+   //Serial.begin(9600);
 
+  //
+  //BLE related setup
+  //
+  Serial.print(F("Initialising the Bluefruit LE module: "));
+
+  if ( !ble.begin(VERBOSE_MODE) )
+  {
+    Serial.println(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
+  }
+  Serial.println( F("OK!") );
+
+  setupBleServices();
+
+  /* Disable command echo from Bluefruit */
+  //ble.echo(false);
+    
+  Serial.println("Requesting Bluefruit info:");
+  /* Print Bluefruit information */
+  ble.info();
+
+  Serial.println(F("Adafruit Bluefruit AT Command Example"));
+  Serial.println(F("-------------------------------------"));
+
+  
+  // Set module to DATA mode
+  Serial.println( F("Switching to DATA mode!") );
+  ble.setMode(BLUEFRUIT_MODE_DATA);
+  
 }
 
 
@@ -224,7 +240,7 @@ void display(const char* label, const char *buffer, uint8_t line = 0 ){
 }
 
 
-Rx_Message_Pool8_t message_pool;
+//Rx_Message_Pool8_t message_pool;
 uint8_t packetbuffer[10];
 uint16_t replyidx = 0;
 char data = 0;
