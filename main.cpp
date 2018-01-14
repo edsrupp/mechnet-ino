@@ -24,6 +24,8 @@
 
 #define VERBOSE_MODE                   true  // If set to 'true' enables debug output
 
+#define CAN_ID_PID          0x7DF
+
 // demo: CAN-BUS Shield, receive data
 //#include <Arduino.h>
 
@@ -81,13 +83,51 @@ void updateBleVal(uint8_t CharacteristicId, uint32_t MeasuredValue) {
   }
 }
 
+void sendPid(unsigned char __pid)
+{
+    unsigned char tmp[8] = {0x02, 0x01, __pid, 0, 0, 0, 0, 0};
+    Serial.print("SEND PID: 0x");
+    Serial.println(__pid, HEX);
+    CAN.sendMsgBuf(CAN_ID_PID, 0, 8, tmp);
+}
+
+//Here we should figure out a way to wait for the requested data to come back from the CAN.
+//I think it would simplify the flow control a little...
+void taskCanRecv()
+{
+    unsigned char len = 0;
+    unsigned char buf[8];
+
+    if(CAN_MSGAVAIL == CAN.checkReceive())                   // check if get data
+    {
+        CAN.readMsgBuf(&len, buf);    // read data,  len: data length, buf: data buf
+
+        Serial.println("\r\n------------------------------------------------------------------");
+        Serial.print("Get Data From id: ");
+        Serial.println(CAN.getCanId(), HEX);
+        for(int i = 0; i<len; i++)    // print the data
+        {
+            Serial.print("0x");
+            Serial.print(buf[i], HEX);
+            Serial.print("\t");
+        }
+        Serial.println();
+        uint8_t one = 1;
+        
+        //Instead of calling setChar here would could return the data from taskCanRec for setChar from within bleRx
+        gatt.setChar(one, buf, len);
+    }
+}
+
 //Callback to handle data/requests coming from the phone i.e. central device.
 void bleRx(int32_t chars_id, uint8_t data[], uint16_t len)
 {
   Serial.print( F("[BLE GATT RX] (" ) );
   Serial.print(chars_id);
   Serial.print(") ");
-  
+  Serial.print("The PID: ");
+  uint8_t pid = data[1] | data[0];
+  Serial.println(pid);
   if (chars_id == charIdRx)
   {  
     Serial.write(data, len);
@@ -99,10 +139,24 @@ void bleRx(int32_t chars_id, uint8_t data[], uint16_t len)
   //Update our characteristic for the phone to pick up
   //updateBleVal(1,777);
 
-  //Here we would take the message coming from the phone and create a message for the CAN...
+  //Here we would take the message coming from the phone and create a message(request) for the CAN...
   //send it out and return the requested information back to the phone which in turn sends that
   //information back to the DMV for emission analysis
-  gatt.setChar(uint8_t charID, uint8_t const data[], uint8_t size);
+  //uint8_t const retDat[] = {'E','d',' ','T','h','i','s',' ','Y','o','u','r',' ','D','a','t','a','!'};
+  //uint8_t const retDat[] = {'F','U','C','K'};
+  unsigned char const retDat[] = {0x46,0x55,0x43,0x4b};
+  //char retDat[] = "FUCK";
+  uint8_t one = 1;
+  uint8_t sd = 4;
+
+  //Here we will forward the incomming PID requested by the phone
+  sendPid(data[0]);
+
+  //Then we wait for the data to be returned
+  taskCanRecv();
+  
+  //Then we turn around and update the characteristic we are using to relay the data back to the phone
+  //gatt.setChar(one, retDat, sd);
 }
 
 void setupBleServices() {
@@ -125,7 +179,7 @@ void setupBleServices() {
   Serial.println(charIdRx);
   
   //Aparently we need to do this for our changes to take effect!!!
-  //If you don't reset here none of the service added above will be seen by your app!!!
+  //If you don't reset here none of the services added above will be seen by your app!!!
   ble.reset();
   ble.sendCommandCheckOK( F("AT+GATTLIST") );
   ble.end();
@@ -152,9 +206,6 @@ bool getUserInput(char buffer[], uint8_t maxSize)
   return true;
 }
 
-//Learn how to register callback to route certain messages to certain functions.
-//Thats how we'll implement flow control to a certain extent
-
 void setup()
 {
 
@@ -176,22 +227,21 @@ void setup()
     
     Serial.println("CAN BUS Shield init ok!");
     
-    CAN.init_Mask(0, 0, 0x3ff);                         // there are 2 mask in mcp2515, you need to set both of them
-    CAN.init_Mask(1, 0, 0x3ff);
-
+    CAN.init_Mask(0, 0, 0x7FC);                         // there are 2 mask in mcp2515, you need to set both of them
+    CAN.init_Mask(1, 0, 0x7FC);
 
     /*
      * set filter, we can receive id from 0x04 ~ 0x09
      */
-     /*
-    CAN.init_Filt(0, 0, 0x01BE);                          // there are 6 filter in mcp2515
-    CAN.init_Filt(1, 0, 0x05);                          // there are 6 filter in mcp2515
+    CAN.init_Filt(0, 0, 0x7E8);                 
+    CAN.init_Filt(1, 0, 0x7E8);
 
-    CAN.init_Filt(2, 0, 0x06);                          // there are 6 filter in mcp2515
-    CAN.init_Filt(3, 0, 0x07);                          // there are 6 filter in mcp2515
-    CAN.init_Filt(4, 0, 0x08);                          // there are 6 filter in mcp2515
-    CAN.init_Filt(5, 0, 0x09);                          // there are 6 filter in mcp2515
-*/   
+    CAN.init_Filt(2, 0, 0x7E8);
+    CAN.init_Filt(3, 0, 0x7E8);
+    CAN.init_Filt(4, 0, 0x7E8); 
+    CAN.init_Filt(5, 0, 0x7E8);
+
+
    //Serial.begin(9600);
 
   //
